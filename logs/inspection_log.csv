@@ -1,0 +1,2 @@
+date,time,odometer_km,engine_cold_or_warm,ambient_conditions,subsystem,component,observation,measurement,value,unit,test_method,photo_filename,hypothesis,confidence,next_action
+YYYY-MM-DD,HH:MM,,cold,,,,,,,,,,,,
