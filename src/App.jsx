@@ -1,477 +1,637 @@
-import { useEffect, useMemo, useState } from 'react';
-import ModelViewer from './components/ModelViewer';
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+const ModelViewer = lazy(() => import("./components/ModelViewer"));
+import {
+  BaselineForm,
+  EmptyState,
+  EntryForm,
+  Icon,
+  Metric,
+  Modal,
+  formatDate,
+} from "./components/UI";
+import {
+  Atlas,
+  CalculationLab,
+  ServicePlan,
+} from "./components/EngineeringPages";
+import { defaultData } from "./data";
+import {
+  daysUntil,
+  localDate,
+  normalizeData,
+  powerFlow,
+  systems,
+} from "./engineering";
 
-const LOCAL_PASSWORD = 'maruti800';
-const STORAGE_KEY = 'maruti800AutomotiveDiary';
-const LOGIN_STORAGE_KEY = 'maruti800DiaryUnlocked';
-
-const defaultData = {
-  vehicles: [
-    {
-      id: 'maruti-800',
-      name: 'Maruti Suzuki 800',
-      vehicle: {
-        name: 'Maruti Suzuki 800',
-        engine: 'F8B inline 3, carburetted',
-        variant: 'Type 2',
-        transmission: 'Manual (verify exact spec)',
-        odometer: 'To record',
-        nextServiceDue: '2026-10-15',
-        tyres: 'To record current size, brand, tread, and pressure',
-        notes: 'Engineering diary and component encyclopedia for the Maruti 800.',
-      },
-      futurePlans: [
-        'Rebuild carburettor and verify fuel delivery behaviour',
-        'Inspect ignition timing and distributor condition',
-        'Document cooling system performance and thermostat operation',
-        'Capture all component photographs with labels',
-      ],
-      diaryEntries: [
-        {
-          id: 1,
-          date: '2026-09-10',
-          title: 'Project setup',
-          category: 'Diary',
-          summary: 'Initialized the automotive diary app and organized the GLB assets.',
-          details: 'Preserved source model files and created working copies for future modelling and component labelling.',
-        },
-        {
-          id: 2,
-          date: '2026-09-10',
-          title: 'Power flow milestone',
-          category: 'Engineering study',
-          summary: 'Defined the first major subsystem path from tank to wheels.',
-          details: 'The plan is to record fuel, combustion, drivetrain, and wheel delivery relationships in a structured way.',
-        },
-      ],
-      modelUrl: '/models/maruti_800_ac.glb',
-    },
-    {
-      id: 'ignis',
-      name: 'Suzuki Ignis',
-      vehicle: {
-        name: 'Suzuki Ignis',
-        engine: 'K-Series petrol',
-        variant: '2022 reference',
-        transmission: 'Manual / Automatic (verify exact spec)',
-        odometer: 'To record',
-        nextServiceDue: '2026-11-01',
-        tyres: 'To record current size, brand, tread, and pressure',
-        notes: 'Reference vehicle for comparison, benchmarking, and learning.',
-      },
-      futurePlans: [
-        'Compare steering and suspension layout to the Maruti 800',
-        'Document drive-by-wire and safety differences',
-        'Capture the chassis and comfort improvements',
-      ],
-      diaryEntries: [
-        {
-          id: 1,
-          date: '2026-09-10',
-          title: 'Reference study started',
-          category: 'Engineering study',
-          summary: 'Added the Ignis as a comparison vehicle alongside the Maruti 800.',
-          details: 'This gives the diary a second vehicle entry for benchmarking and component comparison work.',
-        },
-      ],
-      modelUrl: '/models/2022_suzuki_ignis.glb',
-    },
-  ],
-};
+const STORAGE_KEY = "maruti800AutomotiveDiary";
+const navItems = [
+  ["overview", "Workbench", "grid"],
+  ["diary", "Engineering log", "book"],
+  ["systems", "Subsystem atlas", "layers"],
+  ["service", "Service & plans", "tool"],
+  ["lab", "Calculation lab", "activity"],
+];
+const blankEntry = () => ({
+  title: "",
+  category: "Diary",
+  date: localDate(),
+  summary: "",
+  details: "",
+  confidence: "Observation",
+  value: "",
+  unit: "",
+  conditions: "",
+});
 
 function App() {
-  const [data, setData] = useState(() => {
-    if (typeof window === 'undefined') {
-      return defaultData;
+  const [initial] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return {
+        data: normalizeData(raw ? JSON.parse(raw) : defaultData),
+        error: "",
+      };
+    } catch {
+      return {
+        data: normalizeData(defaultData),
+        error:
+          "Your saved record could not be read. The original is preserved. New changes remain in memory; export a backup to keep them.",
+      };
     }
-
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : defaultData;
   });
-
-  const [currentVehicleId, setCurrentVehicleId] = useState('maruti-800');
-  const [unlocked, setUnlocked] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    return localStorage.getItem(LOGIN_STORAGE_KEY) === 'true';
-  });
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-
-  const [newEntry, setNewEntry] = useState({
-    title: '',
-    category: 'Diary',
-    summary: '',
-    details: '',
-  });
-
-  const [activeNav, setActiveNav] = useState('overview');
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
-
-  useEffect(() => {
-    if (data.vehicles.length === 0) {
-      return;
-    }
-
-    if (!data.vehicles.some((vehicle) => vehicle.id === currentVehicleId)) {
-      setCurrentVehicleId(data.vehicles[0].id);
-    }
-  }, [currentVehicleId, data.vehicles]);
-
-  const activeVehicle = useMemo(
-    () => data.vehicles.find((vehicle) => vehicle.id === currentVehicleId) ?? data.vehicles[0],
-    [currentVehicleId, data.vehicles]
+  const [data, setData] = useState(initial.data);
+  const [storageError, setStorageError] = useState(initial.error);
+  const [vehicleId, setVehicleId] = useState(data.vehicles[0].id);
+  const [nav, setNav] = useState("overview");
+  const [modal, setModal] = useState(null);
+  const [entry, setEntry] = useState(blankEntry);
+  const [baseline, setBaseline] = useState({});
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All entries");
+  const [systemId, setSystemId] = useState("fuel");
+  const [flowIndex, setFlowIndex] = useState(0);
+  const [toast, setToast] = useState("");
+  const active =
+    data.vehicles.find((v) => v.id === vehicleId) || data.vehicles[0];
+  const pendingPlans = active.futurePlans.filter((p) => !p.done);
+  const studied = systems.filter(
+    (s) =>
+      active.studies[s.id]?.status &&
+      active.studies[s.id].status !== "Not started",
+  ).length;
+  const days = daysUntil(active.vehicle.nextServiceDue);
+  const measurements = active.diaryEntries.filter(
+    (e) => e.value !== "" && e.value != null,
+  );
+  const entries = useMemo(
+    () =>
+      active.diaryEntries
+        .filter(
+          (e) =>
+            (category === "All entries" || e.category === category) &&
+            `${e.title} ${e.summary} ${e.details}`
+              .toLowerCase()
+              .includes(query.toLowerCase()),
+        )
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [active.diaryEntries, query, category],
   );
 
-  const stats = useMemo(
-    () => [
-      { label: 'Diary entries', value: activeVehicle.diaryEntries.length },
-      { label: 'Future plans', value: activeVehicle.futurePlans.length },
-      { label: 'Next service', value: activeVehicle.vehicle.nextServiceDue },
-    ],
-    [activeVehicle]
-  );
-
-  const handleLogin = () => {
-    if (password === LOCAL_PASSWORD) {
-      setUnlocked(true);
-      setLoginError('');
-      localStorage.setItem(LOGIN_STORAGE_KEY, 'true');
-      return;
+  useEffect(() => {
+    if (initial.error) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      setStorageError("");
+    } catch {
+      setStorageError(
+        "Changes are in memory only. Device storage is unavailable or full. Export a backup to keep your work.",
+      );
     }
+  }, [data, initial.error]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(""), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
-    setLoginError('Incorrect password.');
-  };
-
-  const updateVehicleField = (field, value) => {
+  function updateActive(update) {
     setData((current) => ({
       ...current,
-      vehicles: current.vehicles.map((vehicle) =>
-        vehicle.id === currentVehicleId
-          ? {
-              ...vehicle,
-              vehicle: {
-                ...vehicle.vehicle,
-                [field]: value,
-              },
-            }
-          : vehicle
+      vehicles: current.vehicles.map((v) =>
+        v.id === active.id ? update(v) : v,
       ),
     }));
-  };
-
-  const handleNavClick = (sectionId) => {
-    setActiveNav(sectionId);
-    document.getElementById(sectionId)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  };
-
-  const addFuturePlan = () => {
-    setData((current) => ({
-      ...current,
-      vehicles: current.vehicles.map((vehicle) =>
-        vehicle.id === currentVehicleId
-          ? {
-              ...vehicle,
-              futurePlans: [...vehicle.futurePlans, 'New future plan'],
-            }
-          : vehicle
-      ),
-    }));
-  };
-
-  const updateFuturePlan = (index, value) => {
-    setData((current) => ({
-      ...current,
-      vehicles: current.vehicles.map((vehicle) =>
-        vehicle.id === currentVehicleId
-          ? {
-              ...vehicle,
-              futurePlans: vehicle.futurePlans.map((plan, planIndex) =>
-                planIndex === index ? value : plan
-              ),
-            }
-          : vehicle
-      ),
-    }));
-  };
-
-  const addEntry = () => {
-    if (!newEntry.title.trim()) {
-      return;
-    }
-
-    setData((current) => ({
-      ...current,
-      vehicles: current.vehicles.map((vehicle) =>
-        vehicle.id === currentVehicleId
-          ? {
-              ...vehicle,
-              diaryEntries: [
-                {
-                  id: Date.now(),
-                  date: new Date().toISOString().slice(0, 10),
-                  ...newEntry,
-                },
-                ...vehicle.diaryEntries,
-              ],
-            }
-          : vehicle
-      ),
-    }));
-
-    setNewEntry({ title: '', category: 'Diary', summary: '', details: '' });
-  };
-
-  if (!unlocked) {
-    return (
-      <div className="login-shell">
-        <div className="login-card">
-          <p className="eyebrow">Automotive diary</p>
-          <h1>Enter local password</h1>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                handleLogin();
-              }
-            }}
-          />
-          <button className="primary-button" onClick={handleLogin}>
-            Open diary
-          </button>
-          {loginError && <p className="login-error">{loginError}</p>}
-        </div>
-      </div>
-    );
   }
-
+  function navigate(id) {
+    setNav(id);
+    setQuery("");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function openEntry(preset = {}) {
+    setEntry({ ...blankEntry(), ...preset });
+    setModal("entry");
+  }
+  function editBaseline() {
+    setBaseline({ ...active.vehicle });
+    setModal("baseline");
+  }
+  function saveEntry(e) {
+    e.preventDefault();
+    if (!entry.title.trim()) return;
+    updateActive((v) => ({
+      ...v,
+      diaryEntries: [
+        { ...entry, title: entry.title.trim(), id: crypto.randomUUID() },
+        ...v.diaryEntries,
+      ],
+    }));
+    setModal(null);
+    setToast("Entry added to your engineering log.");
+  }
+  function exportData(original = false) {
+    try {
+      const content = original
+        ? localStorage.getItem(STORAGE_KEY)
+        : JSON.stringify(data, null, 2);
+      const url = URL.createObjectURL(
+        new Blob([content || ""], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `maruti-engineering-${original ? "original-" : ""}${localDate()}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setToast("Backup exported.");
+    } catch {
+      setToast("Export could not be completed. Device storage is unavailable.");
+    }
+  }
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <aside className="sidebar">
         <div className="brand">
-          <h1>Automotive Diary</h1>
-          <p>Vehicle logbook</p>
+          <span className="brand-mark">
+            <Icon name="activity" size={25} />
+          </span>
+          <span>WORKSHOP</span>
         </div>
-
-        <nav className="nav">
-          <button
-            className={`nav-item ${activeNav === 'overview' ? 'active' : ''}`}
-            onClick={() => handleNavClick('overview')}
-          >
-            Overview
-          </button>
-          <button
-            className={`nav-item ${activeNav === 'diary' ? 'active' : ''}`}
-            onClick={() => handleNavClick('diary')}
-          >
-            Diary
-          </button>
-          <button
-            className={`nav-item ${activeNav === 'service' ? 'active' : ''}`}
-            onClick={() => handleNavClick('service')}
-          >
-            Service
-          </button>
-          <button
-            className={`nav-item ${activeNav === 'model' ? 'active' : ''}`}
-            onClick={() => handleNavClick('model')}
-          >
-            Model
-          </button>
-        </nav>
-      </aside>
-
-      <main className="main-content">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Vehicle record</p>
-            <h2>{activeVehicle.vehicle.name}</h2>
-          </div>
-
-          <div className="topbar-actions">
-            <select
-              value={currentVehicleId}
-              onChange={(event) => setCurrentVehicleId(event.target.value)}
-              className="vehicle-select"
+        <nav aria-label="Main navigation">
+          {navItems.map(([id, label, icon]) => (
+            <button
+              key={id}
+              aria-label={label}
+              title={label}
+              className={`nav-item ${nav === id ? "active" : ""}`}
+              aria-current={nav === id ? "page" : undefined}
+              onClick={() => navigate(id)}
             >
-              {data.vehicles.map((vehicle) => (
-                <option key={vehicle.id} value={vehicle.id}>
-                  {vehicle.name}
-                </option>
-              ))}
-            </select>
-            <button className="primary-button" onClick={addEntry}>Add diary entry</button>
+              <Icon name={icon} />
+              <span>{label}</span>
+              {id === "diary" && (
+                <span className="nav-count">{active.diaryEntries.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <button onClick={() => exportData()}>
+            <Icon name="download" size={17} /> Export workspace
+          </button>
+        </div>
+      </aside>
+      <div className="workspace">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <strong>{navItems.find(([id]) => id === nav)[1]}</strong>
+          </div>
+          <div className="topbar-actions">
+            <span className="vehicle-select-wrap">
+              <Icon name="car" size={18} />
+              <select
+                aria-label="Select vehicle"
+                value={active.id}
+                onChange={(e) => {
+                  setVehicleId(e.target.value);
+                  setModal(null);
+                }}
+              >
+                {data.vehicles.map((v) => (
+                  <option value={v.id} key={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+            <div className="compact-actions">
+              <button
+                aria-label="Export workspace"
+                title="Export workspace"
+                onClick={() => exportData()}
+              >
+                <Icon name="download" size={17} />
+              </button>
+            </div>
           </div>
         </header>
-
-        <section className="stats-grid" aria-label="Vehicle statistics">
-          {stats.map((stat) => (
-            <div key={stat.label} className="stats-card">
-              <span>{stat.label}</span>
-              <strong>{stat.value}</strong>
+        <main id="main-content" className="main-content">
+          {storageError && (
+            <div className="storage-warning" role="alert">
+              {storageError}
+              {initial.error && (
+                <button
+                  className="text-button"
+                  onClick={() => exportData(true)}
+                >
+                  Export original record
+                </button>
+              )}
             </div>
-          ))}
-        </section>
-
-        <section className="panel-grid" id="overview">
-          <div className="panel">
-            <h3>Vehicle baseline</h3>
-            <div className="kv-grid">
-              <div>
-                <label>Engine</label>
-                <input
-                  value={activeVehicle.vehicle.engine}
-                  onChange={(event) => updateVehicleField('engine', event.target.value)}
-                />
-              </div>
-              <div>
-                <label>Variant</label>
-                <input
-                  value={activeVehicle.vehicle.variant}
-                  onChange={(event) => updateVehicleField('variant', event.target.value)}
-                />
-              </div>
-              <div>
-                <label>Transmission</label>
-                <input
-                  value={activeVehicle.vehicle.transmission}
-                  onChange={(event) => updateVehicleField('transmission', event.target.value)}
-                />
-              </div>
-              <div>
-                <label>Odometer</label>
-                <input
-                  value={activeVehicle.vehicle.odometer}
-                  onChange={(event) => updateVehicleField('odometer', event.target.value)}
-                />
-              </div>
-              <div>
-                <label>Tyres</label>
-                <input
-                  value={activeVehicle.vehicle.tyres}
-                  onChange={(event) => updateVehicleField('tyres', event.target.value)}
-                />
-              </div>
-              <div>
-                <label>Next service due</label>
-                <input
-                  type="date"
-                  value={activeVehicle.vehicle.nextServiceDue}
-                  onChange={(event) => updateVehicleField('nextServiceDue', event.target.value)}
-                />
-              </div>
+          )}
+          <section className="page-heading">
+            <div>
+              <h1>
+                {
+                  {
+                    overview: "Workbench",
+                    diary: "Engineering log",
+                    systems: "Subsystem atlas",
+                    service: "Service & plans",
+                    lab: "Calculation lab",
+                  }[nav]
+                }
+              </h1>
             </div>
-          </div>
+            <button className="primary-button" onClick={() => openEntry()}>
+              <Icon name="plus" size={18} /> New log entry
+            </button>
+          </section>
 
-          <div className="panel">
-            <h3>Current notes</h3>
-            <textarea
-              value={activeVehicle.vehicle.notes}
-              rows={8}
-              onChange={(event) => updateVehicleField('notes', event.target.value)}
-            />
-          </div>
-        </section>
-
-        <section className="panel" id="service">
-          <div className="section-header">
-            <h3>Future plans</h3>
-            <button className="secondary-button" onClick={addFuturePlan}>Add plan</button>
-          </div>
-          <ul className="list">
-            {activeVehicle.futurePlans.map((plan, index) => (
-              <li key={`${plan}-${index}`}>
-                <input
-                  value={plan}
-                  onChange={(event) => updateFuturePlan(index, event.target.value)}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="panel panel-stack">
-          <h3>New diary entry</h3>
-          <div className="form-grid">
-            <input
-              placeholder="Title"
-              value={newEntry.title}
-              onChange={(event) => setNewEntry((current) => ({ ...current, title: event.target.value }))}
-            />
-            <select
-              value={newEntry.category}
-              onChange={(event) => setNewEntry((current) => ({ ...current, category: event.target.value }))}
-            >
-              <option>Diary</option>
-              <option>Service</option>
-              <option>Engineering study</option>
-              <option>Parts change</option>
-            </select>
-            <input
-              placeholder="Short summary"
-              value={newEntry.summary}
-              onChange={(event) => setNewEntry((current) => ({ ...current, summary: event.target.value }))}
-            />
-            <textarea
-              placeholder="Details"
-              rows={4}
-              value={newEntry.details}
-              onChange={(event) => setNewEntry((current) => ({ ...current, details: event.target.value }))}
-            />
-          </div>
-        </section>
-
-        <section className="panel" id="diary">
-          <h3>Recent diary entries</h3>
-          <div className="entry-list">
-            {activeVehicle.diaryEntries.map((entry) => (
-              <article key={entry.id} className="entry-card">
-                <div className="entry-header">
-                  <span className="pill">{entry.category}</span>
-                  <span>{entry.date}</span>
+          {nav === "overview" && (
+            <>
+              <section className="overview-grid">
+                <article className="vehicle-stage panel">
+                  <div className="stage-heading">
+                    <div>
+                      <h2>{active.vehicle.name}</h2>
+                      <span>{active.vehicle.variant}</span>
+                    </div>
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="model-viewer viewer-fallback">
+                        Loading...
+                      </div>
+                    }
+                  >
+                    <ModelViewer key={active.id} url={active.modelUrl} />
+                  </Suspense>
+                  <div className="stage-specs">
+                    <div>
+                      <span>ENGINE BASELINE</span>
+                      <strong>{active.vehicle.engine}</strong>
+                    </div>
+                    <div>
+                      <span>TRANSMISSION</span>
+                      <strong>{active.vehicle.transmission}</strong>
+                    </div>
+                    <button
+                      className="icon-button"
+                      aria-label="Edit vehicle baseline"
+                      onClick={editBaseline}
+                    >
+                      <Icon name="edit" size={18} />
+                    </button>
+                  </div>
+                </article>
+                <div className="overview-side">
+                  <article className="panel focus-card">
+                    <h3>{pendingPlans[0]?.text || "No open tasks"}</h3>
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        navigate(pendingPlans.length ? "service" : "systems")
+                      }
+                    >
+                      {pendingPlans.length ? "Service plan" : "Subsystems"}
+                      <Icon name="arrow" size={17} />
+                    </button>
+                  </article>
+                  <article className="panel service-summary">
+                    <span className="icon-tile">
+                      <Icon name="tool" />
+                    </span>
+                    <div>
+                      <p>Next scheduled service</p>
+                      <strong>
+                        {formatDate(active.vehicle.nextServiceDue)}
+                      </strong>
+                      <small
+                        className={days !== null && days < 0 ? "overdue" : ""}
+                      >
+                        {days === null
+                          ? "Set a date in your vehicle baseline"
+                          : days < 0
+                            ? `${Math.abs(days)} days overdue`
+                            : days === 0
+                              ? "Due today"
+                              : `In ${days} days`}{" "}
+                        ·{" "}
+                        <button onClick={() => navigate("service")}>
+                          View
+                        </button>
+                      </small>
+                    </div>
+                  </article>
                 </div>
-                <h4>{entry.title}</h4>
-                <p>{entry.summary}</p>
-                <small>{entry.details}</small>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel" id="model">
-          <h3>3D model viewer</h3>
-          <div className="model-section">
-            <div className="model-viewer-wrap">
-              <ModelViewer url={activeVehicle.modelUrl} />
-            </div>
-            <div className="model-meta">
-              <p>Drag to rotate, scroll to zoom, and right-drag to pan.</p>
-              <div className="model-list">
-                <div className="model-item">
-                  <strong>{activeVehicle.name}</strong>
-                  <a href={activeVehicle.modelUrl} target="_blank" rel="noreferrer">
-                    {activeVehicle.modelUrl}
-                  </a>
-                  <span>Current selected vehicle model</span>
+              </section>
+              <section className="metrics-grid" aria-label="Project progress">
+                <Metric
+                  icon="book"
+                  value={String(active.diaryEntries.length).padStart(2, "0")}
+                  label="Log entries"
+                />
+                <Metric
+                  icon="layers"
+                  value={String(studied).padStart(2, "0")}
+                  suffix="/ 18"
+                  label="Subsystems explored"
+                />
+                <Metric
+                  icon="activity"
+                  value={String(measurements.length).padStart(2, "0")}
+                  label="Measurements recorded"
+                />
+                <Metric
+                  icon="tool"
+                  value={String(pendingPlans.length).padStart(2, "0")}
+                  label="Open workshop tasks"
+                />
+              </section>
+              <section className="panel flow-panel">
+                <div className="section-heading">
+                  <div>
+                    <h2>Power flow</h2>
+                  </div>
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setSystemId(powerFlow[flowIndex].id);
+                      navigate("systems");
+                    }}
+                  >
+                    Open subsystem <Icon name="arrow" size={17} />
+                  </button>
                 </div>
+                <div className="power-flow" aria-label="Power flow stages">
+                  {powerFlow.map((stage, index) => (
+                    <button
+                      key={stage.id}
+                      aria-pressed={flowIndex === index}
+                      className={`flow-step ${flowIndex === index ? "selected" : ""}`}
+                      onClick={() => setFlowIndex(index)}
+                    >
+                      <span className="flow-top">
+                        <span className="flow-number mono">0{index + 1}</span>
+                        <Icon
+                          name={
+                            ["layers", "activity", "activity", "tool", "car"][
+                              index
+                            ]
+                          }
+                          size={19}
+                        />
+                      </span>
+                      <strong>{stage.name}</strong>
+                      <small>{stage.part}</small>
+                      {index < 4 && <span className="flow-arrow">→</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="bottom-grid">
+                <article className="panel recent-panel">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Recent activity</h2>
+                    </div>
+                    <button
+                      className="text-button"
+                      onClick={() => navigate("diary")}
+                    >
+                      View log <Icon name="arrow" size={16} />
+                    </button>
+                  </div>
+                  {[...active.diaryEntries]
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .slice(0, 3)
+                    .map((item) => (
+                      <button
+                        key={item.id}
+                        className="recent-entry"
+                        onClick={() => {
+                          setEntry(item);
+                          setModal("read");
+                        }}
+                      >
+                        <span className="entry-timeline-dot" />
+                        <div>
+                          <span className="mono">
+                            {formatDate(item.date)}{" "}
+                            <span> / {item.category}</span>
+                          </span>
+                          <h3>{item.title}</h3>
+                          <p>{item.summary}</p>
+                        </div>
+                        <Icon name="arrow" size={17} />
+                      </button>
+                    ))}
+                  {!active.diaryEntries.length && (
+                    <EmptyState
+                      text="Your first observation starts the story."
+                      onClick={() => openEntry()}
+                    />
+                  )}
+                </article>
+                <article className="panel notes-panel">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Bench notes</h2>
+                    </div>
+                    <Icon name="edit" size={18} />
+                  </div>
+                  <label className="sr-only" htmlFor="bench-notes">
+                    Current vehicle notes
+                  </label>
+                  <textarea
+                    id="bench-notes"
+                    value={active.vehicle.notes}
+                    onChange={(e) =>
+                      updateActive((v) => ({
+                        ...v,
+                        vehicle: { ...v.vehicle, notes: e.target.value },
+                      }))
+                    }
+                    placeholder="Notes"
+                  />
+                </article>
+              </section>
+            </>
+          )}
+
+          {nav === "diary" && (
+            <>
+              <div className="filter-bar">
+                <label className="search-input">
+                  <Icon name="search" size={18} />
+                  <input
+                    aria-label="Search log entries"
+                    placeholder="Search observations, parts, experiments…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </label>
+                <select
+                  aria-label="Filter entries by category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {[
+                    "All entries",
+                    "Diary",
+                    "Service",
+                    "Engineering study",
+                    "Parts change",
+                    "Measurement",
+                  ].map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="mono muted">{entries.length} RECORDS</span>
               </div>
+              <div className="log-grid">
+                {entries.map((item) => (
+                  <article className="panel log-card" key={item.id}>
+                    <div className="section-heading">
+                      <span className="badge">{item.category}</span>
+                      <time className="mono">{formatDate(item.date)}</time>
+                    </div>
+                    <h2>{item.title}</h2>
+                    <p>{item.summary}</p>
+                    {item.value !== "" && item.value != null && (
+                      <div className="measurement-value mono">
+                        {item.value} <span>{item.unit}</span>
+                        <small>
+                          {item.conditions || "Conditions not recorded"}
+                        </small>
+                      </div>
+                    )}
+                    <div className="log-footer">
+                      <span
+                        className={`confidence ${item.confidence === "Confirmed" ? "confirmed" : ""}`}
+                      >
+                        <span className="status-dot" />{" "}
+                        {item.confidence || "Observation"}
+                      </span>
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setEntry(item);
+                          setModal("read");
+                        }}
+                      >
+                        Read entry <Icon name="arrow" size={16} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {!entries.length && (
+                <EmptyState
+                  text={
+                    query || category !== "All entries"
+                      ? "No entries match these filters."
+                      : "Start with something you noticed about the car."
+                  }
+                  onClick={() => openEntry()}
+                />
+              )}
+            </>
+          )}
+          {nav === "systems" && (
+            <Atlas
+              active={active}
+              updateActive={updateActive}
+              systemId={systemId}
+              setSystemId={setSystemId}
+              studied={studied}
+              openEntry={openEntry}
+            />
+          )}
+          {nav === "service" && (
+            <ServicePlan
+              key={active.id}
+              active={active}
+              updateActive={updateActive}
+              editBaseline={editBaseline}
+            />
+          )}
+          {nav === "lab" && (
+            <CalculationLab active={active} openEntry={openEntry} />
+          )}
+        </main>
+      </div>
+      {modal === "entry" && (
+        <EntryForm
+          entry={entry}
+          setEntry={setEntry}
+          onSave={saveEntry}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "baseline" && (
+        <BaselineForm
+          baseline={baseline}
+          setBaseline={setBaseline}
+          onSave={(e) => {
+            e.preventDefault();
+            updateActive((v) => ({
+              ...v,
+              name: baseline.name,
+              vehicle: baseline,
+            }));
+            setModal(null);
+            setToast("Vehicle baseline updated.");
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "read" && (
+        <Modal title={entry.title} onClose={() => setModal(null)}>
+          <div className="read-entry">
+            <span className="badge">{entry.confidence || "Observation"}</span>
+            <p>{entry.summary}</p>
+            <div className="entry-details">
+              {entry.details || "No additional details recorded."}
             </div>
+            {entry.value !== "" && entry.value != null && (
+              <div className="measurement-value mono">
+                {entry.value} <span>{entry.unit}</span>
+                <small>{entry.conditions}</small>
+              </div>
+            )}
           </div>
-        </section>
-      </main>
+        </Modal>
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          <Icon name="check" size={18} />
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
-
 export default App;

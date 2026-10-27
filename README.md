@@ -1,37 +1,51 @@
-# Maruti 800 Automotive Diary
+# Maruti 800 Automotive Journal
 
-This project now includes a desktop app foundation for an automotive diary, engineering encyclopedia, and service planner.
+A browser-based engineering journal and workshop for documenting the Maruti 800, with a Suzuki Ignis reference model. The same React and Vite app can also be packaged as a Windows desktop application with Electron.
 
-## Stack
+## Features
 
-- React + Vite for the UI
-- Electron for the desktop application
-- Vercel-friendly architecture for a future web deployment
+- Interactive 3D vehicle inspection with camera presets and wireframe mode
+- Searchable engineering diary with measurements, units, and confidence labels
+- Subsystem atlas, service plans, and drivetrain calculation tools
+- JSON export for backing up a workspace
 
 ## Run locally
 
-1. Install dependencies:
-   `npm install`
-2. Start the desktop app in development mode:
-   `npm run dev`
-3. Build the production frontend:
-   `npm run build`
-4. Package the desktop app:
-   `npm run package`
+Requires Node.js 20 or newer.
 
-## Future web architecture
+```sh
+npm install
+npm run dev       # Start Vite and the Electron desktop window
+npm run build     # Create the static site in dist/
+npm run preview   # Preview the production site locally
+npm run package   # Build a portable Windows application in release/
+```
 
-The app is structured so it can later be adapted into a Vercel-hosted web app using:
+To run only the browser app during development, use `npx vite --port 4173 --strictPort`.
 
-- React + Vite frontend
-- Supabase or local JSON/SQLite persistence
-- Static hosting on Vercel
-- Optional serverless functions for uploads, reminders, and service planning
+## Deploy to Vercel
 
-## Project goals
+This is a static Vite site. Import the GitHub repository into Vercel and use these project settings (also recorded in `vercel.json`):
 
-- Record every change made to the Maruti 800
-- Track next service due dates
-- Maintain a component encyclopedia with photographs and explanations
-- Keep engine, tyre, and subsystem records organized
-- Plan future restorations and upgrades
+- Framework preset: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+- Install command: `npm install`
+
+Vercel builds the browser app on each push to the connected branch. The Electron desktop build is not part of the Vercel deployment.
+
+## Workspace data and privacy
+
+Journal records are stored in the current browser or desktop app's local storage. The static Vercel deployment does not upload or sync records to a server. Each browser and origin has separate data; use **Export workspace** to download a JSON backup before clearing browser data or moving to another device. The site has no account system or server-side access control, so anyone using the same browser profile can access its saved journal. Do not enter sensitive personal identifiers.
+
+## Open source and assets
+
+The application source is released under the MIT License in `LICENSE`. Font licence texts are included in `public/licenses/` and `src/assets/fonts/`.
+
+The vehicle model files are provided as project assets in `public/models/` and `model/`. Their original source and redistribution terms have not yet been recorded. They are **not covered by the MIT License**; confirm their rights before redistributing or reusing them. The models are visual references, not dimensionally calibrated drawings.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep observations, measurements, and hypotheses clearly distinguished, include units and test conditions for measurements, and avoid publishing VINs, registration documents, addresses, or other private identifiers.
+
+Technical guidance is educational and is not a substitute for the vehicle's service manual or a qualified mechanic. Follow safe workshop practices when inspecting or repairing a vehicle.
