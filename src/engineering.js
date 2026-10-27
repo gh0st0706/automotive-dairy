@@ -279,6 +279,29 @@ export function normalizeData(value) {
           throw new Error("Invalid workshop task.");
         return { ...plan };
       });
+      if (v.fuelEntries != null && !Array.isArray(v.fuelEntries))
+        throw new Error("Invalid fuel logbook.");
+      const fuelEntries = (v.fuelEntries || []).map((fill) => {
+        if (
+          !fill ||
+          !["string", "number"].includes(typeof fill.id) ||
+          typeof fill.date !== "string" ||
+          !Number.isFinite(Date.parse(`${fill.date}T12:00:00Z`)) ||
+          !Number.isFinite(Number(fill.odometer)) ||
+          Number(fill.odometer) < 0 ||
+          !Number.isFinite(Number(fill.amountPaid)) ||
+          Number(fill.amountPaid) <= 0 ||
+          !Number.isFinite(Number(fill.pricePerLitre)) ||
+          Number(fill.pricePerLitre) <= 0
+        )
+          throw new Error("Invalid fuel fill record.");
+        return {
+          ...fill,
+          odometer: Number(fill.odometer),
+          amountPaid: Number(fill.amountPaid),
+          pricePerLitre: Number(fill.pricePerLitre),
+        };
+      });
       const studies = v.studies || {};
       if (typeof studies !== "object" || Array.isArray(studies))
         throw new Error("Invalid subsystem studies.");
@@ -296,11 +319,31 @@ export function normalizeData(value) {
         name: typeof v.name === "string" ? v.name : vehicle.name,
         vehicle,
         diaryEntries,
+        fuelEntries,
         studies,
         futurePlans,
       };
     }),
   };
+}
+
+export function calculateFuelEconomy(entries) {
+  return [...entries]
+    .sort(
+      (a, b) =>
+        a.odometer - b.odometer || a.date.localeCompare(b.date),
+    )
+    .map((fill, index, sorted) => {
+      const litres = fill.amountPaid / fill.pricePerLitre;
+      const previous = sorted[index - 1];
+      const distance = previous ? fill.odometer - previous.odometer : null;
+      return {
+        ...fill,
+        litres,
+        distance,
+        kmPerLitre: distance != null && distance > 0 ? distance / litres : null,
+      };
+    });
 }
 
 export function calculateDrivetrain({

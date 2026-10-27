@@ -6,6 +6,7 @@ A browser-based engineering journal and workshop for documenting the Maruti 800,
 
 - Interactive 3D vehicle inspection with camera presets and wireframe mode
 - Searchable engineering diary with measurements, units, and confidence labels
+- Fuel logbook that converts spend to litres and calculates each full-tank interval in km/L
 - Subsystem atlas, service plans, and drivetrain calculation tools
 - JSON export for backing up a workspace
 
@@ -36,7 +37,7 @@ Vercel builds the browser app on each push to the connected branch. The Electron
 
 ## Workspace data and privacy
 
-Journal records are stored in the current browser or desktop app's local storage. The static Vercel deployment does not upload or sync records to a server. Each browser and origin has separate data; use **Export workspace** to download a JSON backup before clearing browser data or moving to another device. The site has no account system or server-side access control, so anyone using the same browser profile can access its saved journal. Do not enter sensitive personal identifiers.
+Journal records are stored in the current browser or desktop app's local storage. The static Vercel deployment does not upload or sync records to a server. Fuel quantity is amount paid divided by price per litre; mileage is the odometer distance since the previous fill divided by litres purchased. The first fill sets the baseline, so log full-tank fills for a meaningful km/L result. Each browser and origin has separate data; use **Export workspace** to download a JSON backup before clearing browser data or moving to another device. The site has no account system or server-side access control, so anyone using the same browser profile can access its saved journal. Do not enter sensitive personal identifiers.
 
 ## Open source and assets
 

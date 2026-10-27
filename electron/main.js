@@ -10,7 +10,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 760,
     backgroundColor: "#111514",
-    title: "Workshop — Maruti Engineering Workspace",
+    title: "Maruti 800 Automotive Journal",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

@@ -9,11 +9,8 @@ import {
   Modal,
   formatDate,
 } from "./components/UI";
-import {
-  Atlas,
-  CalculationLab,
-  ServicePlan,
-} from "./components/EngineeringPages";
+import { Atlas, CalculationLab, ServicePlan } from "./components/EngineeringPages";
+import FuelLogbook from "./components/FuelLogbook";
 import { defaultData } from "./data";
 import {
   daysUntil,
@@ -27,6 +24,7 @@ const STORAGE_KEY = "maruti800AutomotiveDiary";
 const navItems = [
   ["overview", "Workbench", "grid"],
   ["diary", "Engineering log", "book"],
+  ["fuel", "Fuel logbook", "fuel"],
   ["systems", "Subsystem atlas", "layers"],
   ["service", "Service & plans", "tool"],
   ["lab", "Calculation lab", "activity"],
@@ -257,6 +255,7 @@ function App() {
                   {
                     overview: "Workbench",
                     diary: "Engineering log",
+                    fuel: "Fuel logbook",
                     systems: "Subsystem atlas",
                     service: "Service & plans",
                     lab: "Calculation lab",
@@ -264,9 +263,11 @@ function App() {
                 }
               </h1>
             </div>
-            <button className="primary-button" onClick={() => openEntry()}>
-              <Icon name="plus" size={18} /> New log entry
-            </button>
+            {nav !== "fuel" && (
+              <button className="primary-button" onClick={() => openEntry()}>
+                <Icon name="plus" size={18} /> New log entry
+              </button>
+            )}
           </section>
 
           {nav === "overview" && (
@@ -569,6 +570,9 @@ function App() {
               studied={studied}
               openEntry={openEntry}
             />
+          )}
+          {nav === "fuel" && (
+            <FuelLogbook active={active} updateActive={updateActive} />
           )}
           {nav === "service" && (
             <ServicePlan

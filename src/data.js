@@ -20,6 +20,7 @@
         "Document cooling system performance and thermostat operation",
         "Capture all component photographs with labels",
       ],
+      fuelEntries: [],
       diaryEntries: [
         {
           id: 1,
@@ -62,6 +63,7 @@
         "Document drive-by-wire and safety differences",
         "Capture the chassis and comfort improvements",
       ],
+      fuelEntries: [],
       diaryEntries: [
         {
           id: 1,

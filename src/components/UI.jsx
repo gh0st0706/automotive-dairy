@@ -38,6 +38,12 @@ export function Icon({ name = "grid", size = 20, ...props }) {
         <path d="m15 15 6 6" />
       </>
     ),
+    fuel: (
+      <>
+        <path d="M6 21V4h10v17M4 21h14" />
+        <path d="M9 8h4M16 7h2l2 2v6a2 2 0 0 0 4 0v-4" />
+      </>
+    ),
     car: (
       <path d="m4 10 2-6h12l2 6M3 10h18v8H3zM5 18v3M19 18v3M6 14h2M16 14h2" />
     ),
